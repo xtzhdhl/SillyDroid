@@ -38,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      # 关键修复：tracker 故意不 checkout，gh run list / gh workflow run 无法从 git remote
+      # 推断目标仓库会直接报错；必须显式告知仓库，否则本 workflow 每次都会在这里红掉。
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Resolve upstream latest SillyTavern tag
         id: upstream
