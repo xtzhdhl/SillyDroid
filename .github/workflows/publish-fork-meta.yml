@@ -185,6 +185,10 @@ jobs:
           cdn_url="https://cdn.jsdelivr.net/gh/${REPO}@master/.github/fork-meta/latest.json"
           served_file="$(mktemp)"
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            # 每轮都重新清一次：jsDelivr 的 gh 分支解析缓存最长 12 小时，
+            # 单次 purge 偶尔只命中部分边缘节点，多轮 purge + 探测才稳。
+            curl -fsS --max-time 30 "$purge_url" > /dev/null || true
+            sleep 3
             if curl -fsS --max-time 20 "${cdn_url}?ts=$(date +%s)" -o "$served_file"; then
               served="$(python3 - "$served_file" <<'PY'
           import json
@@ -206,7 +210,7 @@ jobs:
               exit 0
             fi
             echo "第 ${attempt} 次探测仍为：${served:-空}，等待后重试。"
-            sleep 6
+            sleep 12
           done
 
           echo 'CDN 暂未刷新到新版本；latest.json 已提交，App 端还有 raw.githubusercontent 兜底可用。' >&2

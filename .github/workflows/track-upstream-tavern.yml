@@ -120,9 +120,11 @@ jobs:
           set -euo pipefail
           repo='${{ github.repository }}'
           published_file="$(mktemp)"
-          # 带上时间戳绕过 jsDelivr 的 12 小时边缘缓存，读到的一定是 master 上的当前内容。
+          # 以 raw.githubusercontent 为准判断线上内容：它缓存只有 5 分钟，是权威来源。
+          # jsDelivr 的 gh 分支解析缓存最长 12 小时，拿它判断会把“CDN 还没刷新”
+          # 误判成“元数据没发布”，从而反复触发补发。
           if curl -fsS --max-time 20 \
-            "https://cdn.jsdelivr.net/gh/${repo}@master/.github/fork-meta/latest.json?ts=$(date +%s)" \
+            "https://raw.githubusercontent.com/${repo}/master/.github/fork-meta/latest.json?ts=$(date +%s)" \
             -o "$published_file"; then
             published_version="$(python3 - "$published_file" <<'PY'
           import json
