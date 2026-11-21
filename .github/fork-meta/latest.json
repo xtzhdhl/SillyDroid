@@ -3,16 +3,16 @@
     "code": "ready"
   },
   "release": {
-    "tag": "sillydroid-v1.0.1.70-1.19.1-debug",
-    "title": "SillyDroid Android v1.0.1.70 / Tavern 1.19.1 debug",
+    "tag": "sillydroid-v1.0.1.71-1.19.1-debug",
+    "title": "SillyDroid Android v1.0.1.71 / Tavern 1.19.1 debug",
     "buildType": "debug",
-    "versionName": "1.0.1.70+tavern.1.19.1",
-    "hostVersion": "1.0.1.70",
-    "notesMarkdown": "## 本次更新内容\n\n- 4e29b3c\n  - chore(fork-meta): update latest.json for sillydroid-v1.0.1.69-1.19.1-debug\n\n- 8ae42ad\n  - fix(update): jsDelivr 清缓存改为多轮 purge，线上新鲜度以 raw 为准\n  - 实测 jsDelivr 的 gh 分支解析缓存会持续约 12 小时，单次 purge 后仍可能重新读到旧内容：\n  - - publish-fork-meta 在探测循环里每轮都重新 purge 一次，直到 CDN 返回新版本\n  - - tracker 判断 latest.json 是否落后时改读 raw.githubusercontent（5 分钟缓存），\n  -   避免把 CDN 未刷新误判成元数据未发布\n\n- ecf888d\n  - docs: 补充隐私与安全说明（对外请求清单、数据位置、风险与建议）\n\n- 097504b\n  - docs: 补充 jsDelivr @master 分支缓存导致的“显示已是最新”排查说明\n\n- ec46d85\n  - feat(security): 日志导出自动打码 + 覆盖安装前校验签名；补 60 天保活\n  - - 新增 HostLogSecretRedactor：只在写导出/上传 zip 时打码，手机原始日志不变；\n  -   覆盖 sk-/sk-ant-/AIza/ghp_/Bearer/Authorization/api_key=/token=/secret=/password=/?key=\n  - - 新增 AppUpdateApkSignature：安装前比对包名与签名证书 SHA-256，不一致则阻止并给出明确原因；\n  -   App 内安装与通知栏安装两条路径都接上\n  - - 新增 keepalive 工作流：每月 1/16 号提交心跳文件，避免公开仓库 60 天无活动停用定时巡检\n  - - README 补充上述两项保护与保活机制说明\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.70\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.1\n- Build type: debug\n- Rootfs source: release\n- Dependency source: disabled\n- Server source: release\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.70-1.19.1-debug.apk\n- APK SHA256: e6728710caf46953d3a089cad6fc089399db33dcd71bb1fa630c1cfbfaae1278\n- APK size bytes: 332550627\n\n\n## 用户数据保护\n\n- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。",
+    "versionName": "1.0.1.71+tavern.1.19.1",
+    "hostVersion": "1.0.1.71",
+    "notesMarkdown": "## 本次更新内容\n\n- a01b89f\n  - chore(fork-meta): update latest.json for sillydroid-v1.0.1.70-1.19.1-debug\n\n- 508fdde\n  - feat(sync): 自动合并上游宿主修复 + 钉死 debug/latest 配置\n  - - 新增 sync-upstream-host.yml：每天 12:00 检查上游 master，自动 merge 后 push 触发重建；\n  -   冲突则 abort 并开 issue，手机端不受影响\n  - - 合并后强制还原 README 与站点发布工作流（避免上游把发布状态推回他的站点），\n  -   并把 build-config 的 buildType 钉死为 debug、tavernVersion 钉死为 latest，其余字段照抄上游\n  - - publish-fork-meta 推送前先 rebase，避免与同步/保活并发推 master 时非快进失败\n  - - README 说明“上游宿主 + 酒馆同时更新”的处理方式\n\n- 377a13d\n  - chore: 仓库更名为 SillyDroid，同步更新 App 内更新地址与仓库 slug\n  - - SILLYDROID_LATEST_RELEASE_METADATA_URL 改为 gh/xtzhdhl/SillyDroid@master\n  - - SILLYDROID_GITHUB_REPOSITORY 与 README 同步更名\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.71\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.1\n- Build type: debug\n- Rootfs source: release\n- Dependency source: disabled\n- Server source: release\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.71-1.19.1-debug.apk\n- APK SHA256: 16c2ce8efa93d063dcab32dacda28903e91719c34be5fc4dcedd6b841a506a2c\n- APK size bytes: 332550639\n\n\n## 用户数据保护\n\n- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。",
     "apk": {
-      "assetName": "sillydroid-android-v1.0.1.70-1.19.1-debug.apk",
-      "downloadUrl": "https://github.com/xtzhdhl/using/releases/download/sillydroid-v1.0.1.70-1.19.1-debug/sillydroid-android-v1.0.1.70-1.19.1-debug.apk",
-      "sha256": "e6728710caf46953d3a089cad6fc089399db33dcd71bb1fa630c1cfbfaae1278"
+      "assetName": "sillydroid-android-v1.0.1.71-1.19.1-debug.apk",
+      "downloadUrl": "https://github.com/xtzhdhl/SillyDroid/releases/download/sillydroid-v1.0.1.71-1.19.1-debug/sillydroid-android-v1.0.1.71-1.19.1-debug.apk",
+      "sha256": "16c2ce8efa93d063dcab32dacda28903e91719c34be5fc4dcedd6b841a506a2c"
     }
   }
 }
