@@ -1,1 +1,10 @@
 *.sh text eol=lf
+
+# 本 fork 有意与上游彻底不同、且永远不该被上游覆盖的文件：自动合并上游时始终保留本仓库版本。
+# 需要 CI 里 `git config merge.ours.driver true` 才会生效（见 .github/workflows/sync-upstream-host.yml）。
+# 本地手动合并上游前，也请先执行一次同样的 git config，否则 git 会报 “merge driver 未定义”。
+#
+# 其余文件（含 android-tavern/** 与 sillydroid-build-config.json）不做特殊处理：
+# 上游改到同一处时如实报冲突、开 issue 人工处理，避免悄悄丢掉上游的修复。
+.github/workflows/sillydroid-site-release-state.yml merge=ours
+README.md merge=ours

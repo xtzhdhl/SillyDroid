@@ -1,0 +1,189 @@
+name: sync-upstream-host
+
+# 把上游 SillyDroid 宿主（jialmaster/SillyDroid）的代码修复自动合进本 fork。
+#
+# 为什么需要它：APK 是从**本仓库**的源码构建的。上游作者修了 UI、修了启动、加了新功能，
+# 那些提交只在他的仓库里，不会自己跑到你的 fork 里——fork 只是"分叉"，不是"同步"。
+#
+# 策略：
+#   1. 每天检查上游 master 的 HEAD 是否已经在你的 master 里；
+#   2. 不在就尝试 git merge（不带 --theirs/-X ours，冲突就老实报出来）；
+#   3. 合并成功 → push → 已有的 APK 构建工作流自动重建（android-tavern/** 变更会触发）；
+#   4. 合并冲突 → 立刻 abort（工作区保持干净）+ 开 issue 列出冲突文件，等人工处理，
+#      不会把半成品推进去，也不会影响手机上正在用的版本。
+#
+# 只有本仓库无新增提交时才会自动合并；一旦出现冲突，后续每天都会再试，
+# 但只要冲突还在就会一直是 issue 状态，不会把仓库搞坏。
+
+on:
+  schedule:
+    # 每天 UTC 04:00（北京时间 12:00），排在酒馆巡检（10:00）之后，避免同时抢 master。
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-upstream-host
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+  UPSTREAM_HOST_REPO: jialmaster/SillyDroid
+
+jobs:
+  sync:
+    # 只在 fork 里跑，避免误在作者仓库里制造合并。
+    if: github.repository != 'jialmaster/SillyDroid'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve upstream state
+        id: state
+        run: |
+          set -euo pipefail
+          upstream_head="$(gh api "repos/${UPSTREAM_HOST_REPO}/commits/master" --jq '.sha')"
+          if [ -z "$upstream_head" ] || [ "$upstream_head" = 'null' ]; then
+            echo '读取上游 HEAD 失败，本轮跳过。'
+            echo 'need_sync=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          status="$(gh api "repos/${GH_REPO}/compare/${upstream_head}...master" --jq '.status')"
+          echo "上游 HEAD=${upstream_head:0:8} 本仓库状态=${status}"
+          echo "upstream_head=${upstream_head}" >> "$GITHUB_OUTPUT"
+
+          case "$status" in
+            ahead|identical)
+              echo '本仓库已包含上游全部提交，无需合并。'
+              echo 'need_sync=false' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo '上游有新提交，准备合并。'
+              echo 'need_sync=true' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Merge upstream master
+        id: merge
+        if: steps.state.outputs.need_sync == 'true'
+        run: |
+          set -euo pipefail
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # 本仓库有意与上游保持不同的文件走 merge=ours（见 .gitattributes），
+          # 这里注册这个自定义合并驱动：直接保留当前分支版本，不产生冲突。
+          git config merge.ours.driver true
+
+          git remote add upstream "https://github.com/${UPSTREAM_HOST_REPO}.git" 2>/dev/null || \
+            git remote set-url upstream "https://github.com/${UPSTREAM_HOST_REPO}.git"
+          git fetch --no-tags upstream master
+
+          # 记录合并前的 HEAD，用于合并后还原“必须保留本仓库版本”的文件。
+          before="$(git rev-parse HEAD)"
+
+          if git merge --no-edit upstream/master; then
+            echo '合并成功，正在还原“必须保留本仓库版本”的文件。'
+
+            # merge=ours 只在“两侧都改了同一个文件”时才会被调用；上游单侧改动仍会整份覆盖过来。
+            # 因此这里在合并后强制还原这几份文件，尤其是站点发布工作流——
+            # 上游版本会把发布状态 POST 到 sd.jlmaster.online，fork 里必须保持 no-op。
+            for protected_path in \
+              '.github/workflows/sillydroid-site-release-state.yml' \
+              'README.md'
+            do
+              git checkout "$before" -- "$protected_path" 2>/dev/null || true
+            done
+
+            # 构建配置里的两个字段是 fork 的生命线：必须是 debug（否则装不上已有安装、更新也检测不到）
+            # 且只构建最新酒馆。其余字段（termuxPackages 等）保留上游的最新值。
+            python3 - <<'PY'
+          import json
+
+          path = 'sillydroid-build-config.json'
+          try:
+              with open(path, encoding='utf-8') as handle:
+                  config = json.load(handle)
+          except Exception as error:
+              print(f'读取构建配置失败，跳过字段保护：{error}')
+              raise SystemExit(0)
+
+          build = config.setdefault('build', {})
+          changed = False
+          if build.get('buildType') != 'debug':
+              build['buildType'] = 'debug'
+              changed = True
+          if build.get('tavernVersion') not in ('latest', 'auto'):
+              build['tavernVersion'] = 'latest'
+              changed = True
+
+          if changed:
+              with open(path, 'w', encoding='utf-8') as handle:
+                  json.dump(config, handle, ensure_ascii=False, indent=2)
+                  handle.write('\n')
+              print('已强制 buildType=debug / tavernVersion=latest')
+          else:
+              print('构建配置字段无需修正。')
+          PY
+            git add sillydroid-build-config.json
+
+            if ! git diff --cached --quiet; then
+              git commit --amend --no-edit
+            fi
+
+            echo 'ok=true' >> "$GITHUB_OUTPUT"
+            git --no-pager log --oneline -5
+          else
+            echo '合并出现冲突，已回滚，等工作区保持干净。' >&2
+            conflicts="$(git diff --name-only --diff-filter=U | tr '\n' ' ' || true)"
+            git merge --abort || true
+            echo "conflict_files=${conflicts}" >> "$GITHUB_OUTPUT"
+            echo 'ok=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push merged commit
+        if: steps.merge.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          # 发布元数据 / 保活工作流可能刚推过 master，先变基再推。
+          git pull --rebase origin master || true
+          git push origin HEAD:master
+          echo '已推送，tavern-upstream-apk 会自动重建 APK。'
+
+      - name: Open issue when merge conflicts
+        if: steps.merge.outputs.ok == 'false'
+        run: |
+          set -euo pipefail
+
+          conflicts='${{ steps.merge.outputs.conflict_files }}'
+          existing="$(gh issue list --state open --search '上游宿主合并冲突 in:title' --json number --jq 'length' || echo 0)"
+          if [ "${existing:-0}" != '0' ]; then
+            echo '已有未关闭的冲突 issue，跳过创建。'
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          {
+            printf '自动合并 `%s` 的 master 时发生冲突，已回滚，仓库保持原状。\n\n' "$UPSTREAM_HOST_REPO"
+            printf '冲突文件：\n\n```\n%s\n```\n\n' "$conflicts"
+            echo '处理方式（二选一）：'
+            echo
+            echo '1. 让 AI 助手合并：把本 issue 链接发过去，说“按 issue 里的冲突文件手动合并”，'
+            echo '   会逐个人工解决冲突、跑构建、发布新版本。'
+            echo '2. 自己处理：本地 `git fetch upstream && git merge upstream/master`，'
+            echo '   解决冲突后 push，构建会自动触发。'
+            echo
+            echo '在此之前，手机上的版本不受影响（latest.json 不会变）。'
+          } > "$body_file"
+
+          gh issue create \
+            --title '上游宿主合并冲突，需要人工处理' \
+            --body-file "$body_file" || true

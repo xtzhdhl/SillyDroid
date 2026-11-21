@@ -166,7 +166,10 @@ jobs:
             exit 0
           fi
           git commit -m "chore(fork-meta): update latest.json for ${{ steps.pick.outputs.target_tag }}"
-          git push origin HEAD:${{ github.event.repository.default_branch || 'master' }}
+          # 上游同步、保活工作流也可能在同一时刻推 master，先变基再推，避免非快进直接红掉。
+          target_branch='${{ github.event.repository.default_branch || 'master' }}'
+          git pull --rebase origin "$target_branch" || true
+          git push origin "HEAD:${target_branch}"
 
       - name: Purge jsDelivr cache and verify propagation
         env:

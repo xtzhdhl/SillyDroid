@@ -48,6 +48,46 @@ GitHub 对公开仓库有条规则：**连续 60 天没有任何仓库活动，�
 让仓库活动间隔最大只有 15 天，巡检永远不会因为“太久没动静”被停用。
 心跳文件的路径不在 APK 构建的触发范围内，所以不会引起 330 MB 的构建。
 
+## 上游宿主的修复怎么进到 APK
+
+APK 是从**本仓库**源码构建的。上游 `jialmaster/SillyDroid` 修了 bug、加了功能，那只是他的提交，
+不会自动出现在你的 fork 里（fork 是分叉，不是同步）。所以有这么一条：
+
+`.github/workflows/sync-upstream-host.yml`，每天 12:00（北京时间）跑一次：
+
+1. 检查上游 master 的 HEAD 是否已在你的 master 里，在就什么都不做；
+2. 不在就 `git merge upstream/master`；
+3. 合并成功 → push → 已有的 APK 构建工作流自动重建并发布；
+4. 合并冲突 → 立刻 `git merge --abort` 回滚 + 开 issue 列出冲突文件，**手机会继续用旧版本，不受影响**。
+
+合并时有三处会被强制保护，防止“合并把 fork 搞坏”：
+
+| 文件 | 保护内容 |
+| --- | --- |
+| `.github/workflows/sillydroid-site-release-state.yml` | 永远保留 fork 的 no-op 版本（上游版本会往 `sd.jlmaster.online` 推状态） |
+| `README.md` | 永远保留本仓库版本 |
+| `sillydroid-build-config.json` | 只钉死 `buildType=debug` 与 `tavernVersion=latest`，其余字段照抄上游 |
+
+### 上游宿主和酒馆同时更新怎么办
+
+**结论：一次构建就能同时吃到两边，不需要你做任何选择。**
+
+因为两者来源完全不同：
+
+- **酒馆版本**永远取 `SillyTavern/SillyTavern` 官方**最新 release**（`build.tavernVersion=latest`
+  在 `resolve-tavern-build-plan.sh` 里解析），和上游 fork 里“他自己构建到 1.19.0”没有任何关系。
+  上游就算停留在 1.19.0，你的包也会用 1.19.1。
+- **宿主修复**来自 `sync-upstream-host` 的 merge。
+
+所以“上游修了 bug + 官方发了 1.19.1”会变成一次构建：`版本号=1.0.1.xx+tavern.1.19.1`，
+里面既是上游最新的 Kotlin 代码，也是官方最新的酒馆。
+
+唯一要留意的：如果上游的宿主改动是针对某个旧版酒馆写的（例如依赖了某个旧行为），
+和最新酒馆拼在一起可能不兼容。这种情况构建或启动阶段就会发现，由我跟着修。
+
+两个工作流同一天都推 master 时，构建是**排队串行**的（concurrency group 相同、不取消），
+不会互相覆盖；只是会多花一次构建时间，最后一次发布为准。
+
 ### 手动操作
 
 - **立刻检查上游新版本并构建**：Actions → `track-upstream-tavern` → Run workflow。
