@@ -3,16 +3,16 @@
     "code": "ready"
   },
   "release": {
-    "tag": "sillydroid-v1.0.1.71-1.19.1-debug",
-    "title": "SillyDroid Android v1.0.1.71 / Tavern 1.19.1 debug",
+    "tag": "sillydroid-v1.0.1.72-1.19.1-debug",
+    "title": "SillyDroid Android v1.0.1.72 / Tavern 1.19.1 debug",
     "buildType": "debug",
-    "versionName": "1.0.1.71+tavern.1.19.1",
-    "hostVersion": "1.0.1.71",
-    "notesMarkdown": "## 本次更新内容\n\n- a01b89f\n  - chore(fork-meta): update latest.json for sillydroid-v1.0.1.70-1.19.1-debug\n\n- 508fdde\n  - feat(sync): 自动合并上游宿主修复 + 钉死 debug/latest 配置\n  - - 新增 sync-upstream-host.yml：每天 12:00 检查上游 master，自动 merge 后 push 触发重建；\n  -   冲突则 abort 并开 issue，手机端不受影响\n  - - 合并后强制还原 README 与站点发布工作流（避免上游把发布状态推回他的站点），\n  -   并把 build-config 的 buildType 钉死为 debug、tavernVersion 钉死为 latest，其余字段照抄上游\n  - - publish-fork-meta 推送前先 rebase，避免与同步/保活并发推 master 时非快进失败\n  - - README 说明“上游宿主 + 酒馆同时更新”的处理方式\n\n- 377a13d\n  - chore: 仓库更名为 SillyDroid，同步更新 App 内更新地址与仓库 slug\n  - - SILLYDROID_LATEST_RELEASE_METADATA_URL 改为 gh/xtzhdhl/SillyDroid@master\n  - - SILLYDROID_GITHUB_REPOSITORY 与 README 同步更名\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.71\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.1\n- Build type: debug\n- Rootfs source: release\n- Dependency source: disabled\n- Server source: release\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.71-1.19.1-debug.apk\n- APK SHA256: 16c2ce8efa93d063dcab32dacda28903e91719c34be5fc4dcedd6b841a506a2c\n- APK size bytes: 332550639\n\n\n## 用户数据保护\n\n- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。",
+    "versionName": "1.0.1.72+tavern.1.19.1",
+    "hostVersion": "1.0.1.72",
+    "notesMarkdown": "## What's new\n\n- cc540ed\n  - chore(fork-meta): update latest.json for sillydroid-v1.0.1.71-1.19.1-debug\n\n- d40b2d0\n  - docs: switch documentation and release notes to English\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.72\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.1\n- Build type: debug\n- Rootfs source: release\n- Dependency source: disabled\n- Server source: release\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.72-1.19.1-debug.apk\n- APK SHA256: 801ad9d9b9f9a22248b017ebb8437844d9de2220eec30381fffabb638f44042e\n- APK size bytes: 332550643\n\n\n## Data safety\n\n- Characters, chats, lorebooks and API keys live in the app-private data directory (`data / extensions / plugins`), fully separate from the Tavern source tree that every upgrade re-extracts.\n- On the first launch after an upgrade, `data / extensions / plugins` are hardlink-snapshotted before those assets are refreshed (last 2 snapshots kept).\n- In-place installs keep app data. Do not uninstall, and do not install a build with a different signature.",
     "apk": {
-      "assetName": "sillydroid-android-v1.0.1.71-1.19.1-debug.apk",
-      "downloadUrl": "https://github.com/xtzhdhl/SillyDroid/releases/download/sillydroid-v1.0.1.71-1.19.1-debug/sillydroid-android-v1.0.1.71-1.19.1-debug.apk",
-      "sha256": "16c2ce8efa93d063dcab32dacda28903e91719c34be5fc4dcedd6b841a506a2c"
+      "assetName": "sillydroid-android-v1.0.1.72-1.19.1-debug.apk",
+      "downloadUrl": "https://github.com/xtzhdhl/SillyDroid/releases/download/sillydroid-v1.0.1.72-1.19.1-debug/sillydroid-android-v1.0.1.72-1.19.1-debug.apk",
+      "sha256": "801ad9d9b9f9a22248b017ebb8437844d9de2220eec30381fffabb638f44042e"
     }
   }
 }
