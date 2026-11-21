@@ -1,4 +1,4 @@
-# using
+# SillyDroid
 
 SillyDroid（SillyTavern 安卓直装版）的个人构建镜像：从上游 `jialmaster/SillyDroid` fork，把
 SillyTavern 官方 release 打包成可直接安装的 APK，并在 App 内提供自动更新。
@@ -28,7 +28,7 @@ SillyTavern 发新版 / 本仓库代码有改动
 ### App 读取的地址
 
 ```
-https://cdn.jsdelivr.net/gh/xtzhdhl/using@master/.github/fork-meta/latest.json
+https://cdn.jsdelivr.net/gh/xtzhdhl/SillyDroid@master/.github/fork-meta/latest.json
 ```
 
 这个地址在 APK 里是编译期常量（`SILLYDROID_LATEST_RELEASE_METADATA_URL`）。App 端还内置了多镜像兜底，
@@ -132,7 +132,7 @@ SillyTavern 运行时通过 `--dataRoot` 指到持久目录，并把 `public/scr
 2. 若显示“当前已是最新版本”，先确认线上元数据是不是真的更新了：
 
    ```bash
-   curl -s "https://cdn.jsdelivr.net/gh/xtzhdhl/using@master/.github/fork-meta/latest.json?ts=$(date +%s)"
+   curl -s "https://cdn.jsdelivr.net/gh/xtzhdhl/SillyDroid@master/.github/fork-meta/latest.json?ts=$(date +%s)"
    ```
 
    对比 `release.versionName` 与本机版本；如果线上还是旧版本，去 Actions 看
