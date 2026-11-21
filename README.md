@@ -91,6 +91,55 @@ SillyTavern 运行时通过 `--dataRoot` 指到持久目录，并把 `public/scr
 3. 只有本仓库**构建产出过**的版本才会出现在 latest.json 里。上游发了新版但还没构建时，
    手机端只能等下一轮巡检（每天一次）+ 一次 APK 构建（约 1~2 小时，APK 约 330 MB）。
 
+## 隐私与安全
+
+### App 会主动访问的地址
+
+| 用途 | 目标 | 发出内容 |
+| --- | --- | --- |
+| 检查更新 | `cdn.jsdelivr.net` / `fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `raw.githubusercontent.com` | 只有 HTTP 请求头（UA、IP），不带任何聊天或配置 |
+| 下载更新包 | `github.com` 的 Release 资产（HTTPS，下载后校验 SHA256） | 同上 |
+| 安装/更新扩展、插件 | `github.com` / `gitlab.com`（你自己填的仓库地址） | 同上 |
+| 聊天推理 | 你在 SillyTavern 里配置的 API（OpenAI / Claude / 本地等） | 聊天内容，这是 SillyTavern 自身行为 |
+| 崩溃 / 日志上传 | **无**：本构建的 `SILLYDROID_CRASH_LOG_UPLOAD_URL` 为空，上传器直接短路 | 无 |
+
+没有埋点、没有设备指纹、没有启动上报。
+
+### 数据存在哪
+
+- `files/android-tavern/data/server/{data,extensions,plugins}`：角色、聊天、世界书、第三方扩展。
+- `files/android-tavern/bootstrap/server/config.yaml`：含 API Key，**明文**（SillyTavern 原生行为）。
+- 清单里 `android:allowBackup="false"`：不参与系统云备份，也不能用 `adb backup` 抽走。
+- 应用私有目录在 Android 10+ 对其它应用不可见；系统「文件」App 通过 SAF 入口访问时需要你手动授权。
+
+### 真实风险清单（按严重度）
+
+1. **第三方扩展 / 后端插件**：它们是完整的 JS / Node 程序，能读 data 目录、能任意联网。只装你信得过的仓库，
+   装完最好看一眼它在 `extensions/` 里做了什么。
+2. **debug 包本身是 debuggable 的**：开着 USB 调试并连到不可信电脑时，`adb` / `run-as` 可以读到应用私有数据。
+   用完关掉开发者选项。
+3. **「允许外部访问」= 把酒馆暴露到局域网**：同网段设备可直接访问。需要开就配合 SillyTavern 的 basicAuth，
+   不需要就别开。
+4. **仓库里的 debug keystore 是公开的**：签名不构成信任边界。谁能往本仓库 push，谁就能发布一个同签名、
+   能被手机直接覆盖安装的包——所以不要给仓库加协作者，务必开 2FA。
+5. **明文流量**：`usesCleartextTraffic=true` 是为了连局域网 LLM（`http://192.168.x.x`），代价是同类 http 请求
+   可被同网段嗅探；走公网的 API 请确认是 https。
+6. **公开的构建日志**：release 签名材料只从 Actions secrets 注入（debug 构建根本不读），日志里只有变量名。
+
+### 建议
+
+- 别把 `config.yaml` 截图/发群，里面有明文 key；泄露了就去后台吊销重建。
+- 分享日志前自己过一眼。需要「导出/上传日志自动打码 api key / Authorization」可以再打包一版。
+- 手机加锁屏密码，平时关闭 USB 调试。
+
+## 和上游仓库的关系
+
+- 这是 GitHub 上的公开 fork，上游作者能在「Forks」列表里看到它存在（以及提交和 Release 名），
+  除此之外**没有任何东西推给他**：没有 PR、没有 issue、没有往上游写任何东西。
+- `.github/workflows/sillydroid-site-release-state.yml` 在 fork 里是 no-op，不会把发布状态 POST 到
+  `sd.jlmaster.online`；构建过程对上游仓库零改动。
+- 想更低调可以把仓库改成 private（代价：Actions 会消耗私有仓库分钟数，330 MB 的构建很吃配额）。
+
 ## 目录速览
 
 - `android-tavern/`：Android 宿主（Kotlin + View/Compose）、Tavern 运行时封装、更新器。
