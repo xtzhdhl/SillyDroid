@@ -90,6 +90,11 @@ SillyTavern 运行时通过 `--dataRoot` 指到持久目录，并把 `public/scr
    `track-upstream-tavern` / `tavern-upstream-apk` / `publish-fork-meta` 三个工作流哪一环没跑成功。
 3. 只有本仓库**构建产出过**的版本才会出现在 latest.json 里。上游发了新版但还没构建时，
    手机端只能等下一轮巡检（每天一次）+ 一次 APK 构建（约 1~2 小时，APK 约 330 MB）。
+4. **jsDelivr 的 `@master` 会缓存「分支指向哪个提交」（最长 12 小时）**：新版本刚发布时，部分网络仍可能读到
+   旧 latest.json，表现就是“检查更新说已是最新”。`purge.jsdelivr.net` 能清文件缓存，但清不掉每个边缘节点
+   的分支解析缓存。此时的应对：
+   - 直接从 Release 页下载新 APK 覆盖安装（不会丢数据，见下文数据保护一节）；
+   - 装过一次带多源兜底的版本后，App 会用 `raw.githubusercontent.com` 复核结论，这类问题不会再出现。
 
 ## 隐私与安全
 
