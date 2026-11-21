@@ -3,16 +3,16 @@
     "code": "ready"
   },
   "release": {
-    "tag": "sillydroid-v1.0.1.68-1.19.0-debug",
-    "title": "SillyDroid Android v1.0.1.68 / Tavern 1.19.0 debug",
+    "tag": "sillydroid-v1.0.1.69-1.19.1-debug",
+    "title": "SillyDroid Android v1.0.1.69 / Tavern 1.19.1 debug",
     "buildType": "debug",
-    "versionName": "1.0.1.68+tavern.1.19.0",
-    "hostVersion": "1.0.1.68",
-    "notesMarkdown": "## 本次更新内容\n\n- 8b86bc7\n  - Auto-configure auto-update pipeline (tracker, meta publisher, stub README, debug build)\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.68\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.0\n- Build type: debug\n- Rootfs source: built\n- Dependency source: disabled\n- Server source: built\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.68-1.19.0-debug.apk\n- APK SHA256: 62a24f16241eb07229101da1121dc0b1470744c89f01dc830b3ba0a7246ca73d\n- APK size bytes: 332521651\n",
+    "versionName": "1.0.1.69+tavern.1.19.1",
+    "hostVersion": "1.0.1.69",
+    "notesMarkdown": "## 本次更新内容\n\n- 8d1a079\n  - fix(update): 让新版本检测真正跑通，并为 data/extensions 加保护\n  - 更新链路：\n  - - track-upstream-tavern 改为每天巡检，并以 .update.json 里的 upstream_version 为准比对，\n  -   同时新增 latest.json 与最新构建的一致性校验（不一致就补发元数据）\n  - - publish-fork-meta 提交后主动清理 jsDelivr 缓存并轮询校验 CDN 已刷新\n  - - App 端读取 latest.json 时按 cdn/fastly/gcore/raw.githubusercontent 多镜像兜底，\n  -   规避单一 CDN 被墙或命中 12 小时陈旧缓存导致的“检查不到更新”\n  - 数据保护：\n  - - 新增 TavernUserDataGuard：覆盖解包 server 资产前，把 data/extensions/plugins\n  -   打成硬链接快照（保留 2 份），失败也绝不阻断启动\n  - - 解包前断言用户数据目录必须位于 serverDir 之外，配置被改坏时直接中止而不是覆盖\n  - - README 补充更新链路、数据目录与排查步骤\n\n\n## SillyDroid Android APK\n\n- Host version: 1.0.1.69\n- Upstream repo: SillyTavern/SillyTavern\n- Upstream tag: 1.19.1\n- Build type: debug\n- Rootfs source: release\n- Dependency source: disabled\n- Server source: built\n- Build source: built\n- APK asset: sillydroid-android-v1.0.1.69-1.19.1-debug.apk\n- APK SHA256: b2d28c9b5e864397fa7426b2694be63a216bebdf401cd9eb62a1ceb7980aecd3\n- APK size bytes: 332536807\n\n\n## 用户数据保护\n\n- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。",
     "apk": {
-      "assetName": "sillydroid-android-v1.0.1.68-1.19.0-debug.apk",
-      "downloadUrl": "https://github.com/xtzhdhl/using/releases/download/sillydroid-v1.0.1.68-1.19.0-debug/sillydroid-android-v1.0.1.68-1.19.0-debug.apk",
-      "sha256": "62a24f16241eb07229101da1121dc0b1470744c89f01dc830b3ba0a7246ca73d"
+      "assetName": "sillydroid-android-v1.0.1.69-1.19.1-debug.apk",
+      "downloadUrl": "https://github.com/xtzhdhl/using/releases/download/sillydroid-v1.0.1.69-1.19.1-debug/sillydroid-android-v1.0.1.69-1.19.1-debug.apk",
+      "sha256": "b2d28c9b5e864397fa7426b2694be63a216bebdf401cd9eb62a1ceb7980aecd3"
     }
   }
 }
