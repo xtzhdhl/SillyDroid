@@ -851,6 +851,7 @@ class AssetExtractor(private val context: Context) {
         refreshPlan: ServerAssetRefreshPlan,
         onProgress: (processedEntries: Int, totalEntries: Int) -> Unit
     ) {
+        assertUserDataOutsideServerDirectory(paths)
         paths.serverDir.mkdirs()
         var processedOffset = 0
         val sourceEntries = if (refreshPlan.sourceChanged) {
@@ -901,6 +902,21 @@ class AssetExtractor(private val context: Context) {
         }
 
         copyServerBootstrapFiles(paths)
+    }
+
+    /**
+     * 用户数据必须待在 serverDir 之外：serverDir 是每次 APK 升级都会被覆盖解包的目标目录。
+     * 一旦配置被改坏成“数据目录位于解包目录内部”，解包就会直接压在 data / extensions 上，
+     * 这种时候宁可让启动失败并明确报错，也不能静默覆盖用户数据。
+     */
+    private fun assertUserDataOutsideServerDirectory(paths: HostPaths) {
+        val serverRoot = paths.serverDir.absolutePath.trimEnd(File.separatorChar)
+        val dataRoot = paths.serverDataDir.absolutePath
+        if (dataRoot == serverRoot || dataRoot.startsWith(serverRoot + File.separator)) {
+            throw BootstrapException(
+                "用户数据目录位于 Tavern 解包目录内，已中止解包以避免覆盖 data / extensions：" + dataRoot
+            )
+        }
     }
 
     private fun copyServerBootstrapFiles(paths: HostPaths) {

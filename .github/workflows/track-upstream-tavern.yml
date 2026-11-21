@@ -1,22 +1,20 @@
 name: track-upstream-tavern
 
-# Fork 专用：巡检 SillyTavern 官方最新 release，发现新版本就自动触发 APK 构建。
-# 放置于 .github/workflows/track-upstream-tavern.yml
-# 首次启用前，请确认本仓库 Releases 里已有一个 sillydroid-v* 开头的 release（种子 release 也行），
-# 否则脚本会把"从未构建过"当作最新并直接开建——这正是期望行为，只是提醒你它会立刻开工。
+# Fork 专用巡检：每天检查一次
+#   1) SillyTavern 官方是否出了新 release；
+#   2) 本 fork 的 latest.json 是否和最新一次 APK 构建一致（不一致就修复 CDN 元数据）；
+#   3) 本 fork 是否落后于上游 SillyDroid 宿主的修复提交（落后就开 issue 提醒合并）。
+#
+# 为什么要每天跑：App 端只能“看到本 fork 已经构建好的版本”，巡检越慢，
+# 手机里能看到的更新就越晚。原先每 3 天一次，最坏要等 3 天 + 一次 APK 构建时间。
+#
+# 等不及的时候：Actions → track-upstream-tavern → Run workflow 立刻跟进。
 
 on:
   schedule:
-    # ─── 巡检频率（当前定案：每 3 天 1 次）─────────────────────
-    # 想改频率时只需替换下面这一行（cron 按 UTC，北京时间 = UTC+8）：
-    #   每 3 天 10:00（当前生效）  → cron: '0 2 */3 * *'
-    #   每月 1 号 10:00            → cron: '0 2 1 * *'
-    #   每月 15 号 10:00           → cron: '0 2 15 * *'
-    #   每周一 10:00               → cron: '0 2 * * 1'
-    #   每天 10:00                 → cron: '0 2 * * *'
-    # 注意：巡检只会"看"，官方没发新版就直接退出，不构建、不发布、碰不到你的手机。
-    # 等不及重复周期时：Actions → track-upstream-tavern → Run workflow 手动触发即刻跟进。
-    - cron: '0 2 */3 * *'
+    # 每天 UTC 02:00（北京时间 10:00）巡检一次。
+    #   每 3 天：'0 2 */3 * *'    每周一：'0 2 * * 1'    每月 1 号：'0 2 1 * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       tavern_tag:
@@ -27,86 +25,241 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
+  issues: write
 
 concurrency:
   group: track-upstream-tavern
   cancel-in-progress: false
 
+env:
+  GH_TOKEN: ${{ github.token }}
+  # tracker 故意不 checkout：gh run list / gh workflow run 无法从 git remote 推断仓库，
+  # 必须显式指定，否则每次都会在这里红掉。
+  GH_REPO: ${{ github.repository }}
+  UPSTREAM_TAVERN_REPO: SillyTavern/SillyTavern
+  UPSTREAM_HOST_REPO: jialmaster/SillyDroid
+
 jobs:
   track:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      # 关键修复：tracker 故意不 checkout，gh run list / gh workflow run 无法从 git remote
-      # 推断目标仓库会直接报错；必须显式告知仓库，否则本 workflow 每次都会在这里红掉。
-      GH_REPO: ${{ github.repository }}
     steps:
       - name: Resolve upstream latest SillyTavern tag
         id: upstream
         run: |
           set -euo pipefail
-          tag="$(gh api 'repos/SillyTavern/SillyTavern/releases/latest' --jq '.tag_name')"
+          tag="$(gh api "repos/${UPSTREAM_TAVERN_REPO}/releases/latest" --jq '.tag_name')"
+          if [ -z "$tag" ] || [ "$tag" = 'null' ]; then
+            echo '无法解析 SillyTavern 官方最新 tag。' >&2
+            exit 1
+          fi
           echo "upstream_tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "官方最新 tag：${tag}"
 
-      - name: Resolve last built tavern tag in this fork
+      - name: Resolve latest built APK in this fork
         id: built
         run: |
           set -euo pipefail
-          repo='${{ github.repository }}'
-          # 取本 fork 最新的一个 sillydroid-v* release（按创建时间倒序的第一个）
-          tag="$(gh api "repos/${repo}/releases?per_page=100" \
-            --jq '[.[].tag_name | select(startswith("sillydroid-v"))][0] // ""')"
-          if [ -z "$tag" ]; then
+
+          releases="$(mktemp)"
+          gh api "repos/${GH_REPO}/releases?per_page=100" \
+            --jq '[.[] | select(.tag_name | startswith("sillydroid-v"))]' > "$releases"
+
+          if [ "$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))))' "$releases")" = '0' ]; then
             echo '本 fork 尚无任何 APK release（种子 release 未建？）按从未构建处理。'
-            echo 'built_tag=' >> "$GITHUB_OUTPUT"
-          else
-            # 形如 sillydroid-v1.0.1.68-1.19.0-release → 提取 1.19.0
-            tavern="$(printf '%s' "$tag" | sed -E 's/^sillydroid-v[0-9.]+-//; s/-(release|debug)$//')"
-            echo "built_tag=${tavern}" >> "$GITHUB_OUTPUT"
-            echo "fork 最近已构建：${tavern}（tag: ${tag}）"
+            {
+              printf 'built_tag=\n'
+              printf 'built_version_name=\n'
+              printf 'built_release_tag=\n'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          release_json="$(mktemp)"
+          python3 - "$releases" "$release_json" <<'PY'
+          import json
+          import sys
+
+          releases = json.load(open(sys.argv[1], encoding='utf-8'))
+          # GitHub 返回顺序是 created_at 倒序；再按 published_at/tag 兜底排序一次，避免异常顺序。
+          releases.sort(key=lambda item: item.get('created_at') or '', reverse=True)
+          json.dump(releases[0], open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False)
+          PY
+
+          release_tag="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["tag_name"])' "$release_json")"
+          echo "fork 最近一次 APK release：${release_tag}"
+
+          # 以 release 里附带的 .update.json 为权威来源：它由构建阶段直接写出，
+          # 比从 tag 里 sed 出来更不容易被命名规则变化搞错。
+          asset_id="$(gh api "repos/${GH_REPO}/releases/tags/${release_tag}" \
+            --jq '.assets[] | select(.name | endswith(".update.json")) | .id' | head -n 1)"
+
+          built_tag=''
+          built_version_name=''
+          if [ -n "${asset_id:-}" ]; then
+            meta="$(mktemp)"
+            gh api "repos/${GH_REPO}/releases/assets/${asset_id}" \
+              -H 'Accept: application/octet-stream' > "$meta"
+            built_tag="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("upstream_version") or "")' "$meta")"
+            built_version_name="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("version_name") or "")' "$meta")"
+          fi
+          if [ -z "$built_tag" ]; then
+            built_tag="$(printf '%s' "$release_tag" | sed -E 's/^sillydroid-v[0-9.]+-//; s/-(release|debug)$//')"
+          fi
+
+          {
+            printf 'built_tag=%s\n' "$built_tag"
+            printf 'built_version_name=%s\n' "$built_version_name"
+            printf 'built_release_tag=%s\n' "$release_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "该构建对应的 Tavern tag：${built_tag}（versionName: ${built_version_name:-未知}）"
+
+      - name: Check published latest.json freshness
+        id: meta
+        run: |
+          set -euo pipefail
+          repo='${{ github.repository }}'
+          published_file="$(mktemp)"
+          # 带上时间戳绕过 jsDelivr 的 12 小时边缘缓存，读到的一定是 master 上的当前内容。
+          if curl -fsS --max-time 20 \
+            "https://cdn.jsdelivr.net/gh/${repo}@master/.github/fork-meta/latest.json?ts=$(date +%s)" \
+            -o "$published_file"; then
+            published_version="$(python3 - "$published_file" <<'PY'
+          import json
+          import sys
+
+          try:
+            payload = json.load(open(sys.argv[1], encoding='utf-8'))
+          except Exception:
+            print('')
+            raise SystemExit(0)
+          release = payload.get('release') or {}
+          print(str(release.get('versionName') or '').strip())
+          PY
+          )"
+          else
+            published_version=''
+          fi
+
+          {
+            printf 'published_version_name=%s\n' "$published_version"
+          } >> "$GITHUB_OUTPUT"
+          echo "线上 latest.json 版本：${published_version:-读取失败}"
 
       - name: Skip when an APK build is already running
         id: inflight
         run: |
           set -euo pipefail
-          busy="$(gh run list --workflow=sillydroid-upstream-apk.yml \
-            --status queued --json databaseId --jq 'length')"
-          busy2="$(gh run list --workflow=sillydroid-upstream-apk.yml \
-            --status in_progress --json databaseId --jq 'length')"
+          busy="$(gh run list --workflow=sillydroid-upstream-apk.yml --status queued --json databaseId --jq 'length')"
+          busy2="$(gh run list --workflow=sillydroid-upstream-apk.yml --status in_progress --json databaseId --jq 'length')"
           total=$((busy + busy2))
           echo "inflight=${total}" >> "$GITHUB_OUTPUT"
           echo "进行中的构建数：${total}"
 
       - name: Decide and dispatch
+        id: decide
         run: |
           set -euo pipefail
+
           upstream='${{ steps.upstream.outputs.upstream_tag }}'
           built='${{ steps.built.outputs.built_tag }}'
+          built_version='${{ steps.built.outputs.built_version_name }}'
+          published_version='${{ steps.meta.outputs.published_version_name }}'
           forced='${{ inputs.tavern_tag }}'
           inflight='${{ steps.inflight.outputs.inflight }}'
 
           if [ "$inflight" != '0' ]; then
             echo "已有构建在进行（${inflight} 个），本轮跳过，下一轮再查。"
+            echo 'action=busy' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           target="$upstream"
-          reason='官方最新 != 已构建'
           if [ -n "$forced" ]; then
             target="$forced"
-            reason='手动指定 tavern_tag'
-          elif [ "$built" = "$upstream" ]; then
-            echo "已是最新（${upstream}），无事发生。"
+            echo "手动指定构建目标：${target}"
+            echo 'action=build' >> "$GITHUB_OUTPUT"
+          elif [ "$built" != "$upstream" ]; then
+            echo "需要构建：官方最新 ${upstream} != 本 fork 已构建 ${built:-（无）}"
+            echo 'action=build' >> "$GITHUB_OUTPUT"
+          elif [ -n "$built_version" ] && [ "$published_version" != "$built_version" ]; then
+            # 构建产物已经在，但 latest.json 没跟上（发布环节失败 / CDN 没刷新）：
+            # 手机端就是靠它判断更新的，这里必须补一次。
+            echo "检测到最新构建 ${built_version} 未发布到 latest.json（线上为 ${published_version:-空}），补发元数据。"
+            echo 'action=republish' >> "$GITHUB_OUTPUT"
+            exit 0
+          else
+            echo "已是最新（${upstream}），且 latest.json 与最新构建一致，无事发生。"
+            echo 'action=none' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "触发构建：${target}（原因：${reason}）"
           gh workflow run sillydroid-upstream-apk.yml \
             --ref master \
             -f tavern_tag="$target" \
             -f build_type=auto \
             -f publish_target=release \
             -f force_rebuild=false
+
+      - name: Republish latest.json when it lags behind the build
+        if: steps.decide.outputs.action == 'republish'
+        run: |
+          set -euo pipefail
+          gh workflow run publish-fork-meta.yml \
+            --ref master \
+            -f release_tag='${{ steps.built.outputs.built_release_tag }}'
+
+      - name: Report upstream host divergence
+        if: always()
+        run: |
+          set -euo pipefail
+
+          # 上游 SillyDroid 宿主的修复不会自动进入本 fork（自动 merge 风险太高），
+          # 但也不能静默忽略：落后就在 issue 里留一条待办提醒，避免“宿主有修复却没跟上”。
+          #
+          # 判定方式：拿上游 master 的 HEAD 去和本 fork 的 master 比对。
+          #   ahead / identical → 本 fork 已包含上游全部提交（含 fork 自己的提交）
+          #   behind / diverged → 上游有新提交还没进来
+          upstream_head="$(gh api "repos/${UPSTREAM_HOST_REPO}/commits/master" --jq '.sha' 2>/dev/null || echo '')"
+          if [ -z "$upstream_head" ]; then
+            echo '读取上游宿主 HEAD 失败，跳过本次检查。'
+            exit 0
+          fi
+
+          status="$(gh api "repos/${GH_REPO}/compare/${upstream_head}...master" \
+            --jq '.status' 2>/dev/null || echo 'unknown')"
+          echo "本 fork 相对上游宿主 HEAD（${upstream_head:0:8}）的状态：${status}"
+
+          if [ "$status" = 'ahead' ] || [ "$status" = 'identical' ]; then
+            echo '本 fork 已包含上游宿主的全部提交。'
+            exit 0
+          fi
+          if [ "$status" != 'behind' ] && [ "$status" != 'diverged' ]; then
+            echo '无法判定与上游宿主的差异，跳过。'
+            exit 0
+          fi
+
+          existing="$(gh issue list --state open --search 'SillyDroid 上游宿主有新提交 in:title' --json number --jq 'length' || echo 0)"
+          if [ "${existing:-0}" != '0' ]; then
+            echo '已有未关闭的合并提醒 issue，跳过创建。'
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          {
+            printf '本 fork 相对 %s 的 master HEAD（%s）状态为 `%s`。\n\n' "$UPSTREAM_HOST_REPO" "${upstream_head:0:8}" "$status"
+            echo '上游宿主的修复不会自动进入本 fork，请手动合并后推送一次（推送会自动触发 APK 重建）：'
+            echo
+            echo '```bash'
+            echo "git remote add upstream https://github.com/${UPSTREAM_HOST_REPO}.git  # 若尚未添加"
+            echo 'git fetch upstream'
+            echo 'git merge upstream/master'
+            echo 'git push origin master'
+            echo '```'
+            echo
+            echo '合并后关闭本 issue。'
+          } > "$body_file"
+
+          gh issue create \
+            --title 'SillyDroid 上游宿主有新提交，需要手动合并' \
+            --body-file "$body_file" || true

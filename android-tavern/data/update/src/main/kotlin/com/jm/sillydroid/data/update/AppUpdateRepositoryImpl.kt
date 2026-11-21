@@ -46,10 +46,45 @@ class AppUpdateRepositoryImpl(
     }
 
     override suspend fun fetchLatestAvailableRelease(config: AppUpdateRequestConfig): AvailableAppRelease? {
-        return SiteLatestReleaseParser.parseLatestAvailableRelease(
-            latestReleaseState = fetchJsonObject(config.latestReleaseMetadataUrl),
-            config = config
-        )
+        // 同一份 latest.json 会在多个镜像上兜底重试：单个 CDN 被墙、超时或命中陈旧缓存，
+        // 都不会再让“检查更新”整体失败或漏掉版本。
+        val endpoints = AppUpdateMetadataEndpointResolver.resolve(config.latestReleaseMetadataUrl)
+        if (endpoints.isEmpty()) {
+            throw IOException("更新源地址为空，无法检查更新。")
+        }
+
+        var reachableEndpointCount = 0
+        var lastError: Throwable? = null
+
+        for (endpoint in endpoints) {
+            val payload = try {
+                fetchText(endpoint)
+            } catch (error: Exception) {
+                lastError = error
+                continue
+            }
+            reachableEndpointCount += 1
+
+            // 任一镜像报告了更高版本就立刻采纳；报告“已是最新”时继续用后续镜像复核，
+            // 只有在所有可达镜像都表示无更新时才判定为已是最新。
+            val release = runCatching {
+                SiteLatestReleaseParser.parseLatestAvailableRelease(
+                    latestReleaseState = JSONObject(payload),
+                    config = config
+                )
+            }.getOrElse { error ->
+                lastError = error
+                null
+            }
+            if (release != null) {
+                return release
+            }
+        }
+
+        if (reachableEndpointCount == 0) {
+            throw lastError ?: IOException("所有更新元数据镜像均不可用。")
+        }
+        return null
     }
 
     override suspend fun startDownload(release: AvailableAppRelease): AppDownloadState {
@@ -365,10 +400,6 @@ class AppUpdateRepositoryImpl(
         }
 
         return digest.digest().joinToString(separator = "") { byte -> "%02x".format(Locale.US, byte) }
-    }
-
-    private fun fetchJsonObject(url: String): JSONObject {
-        return JSONObject(fetchText(url))
     }
 
     private fun fetchText(url: String): String {

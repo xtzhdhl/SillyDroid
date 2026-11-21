@@ -120,6 +120,15 @@ jobs:
           def s(key, default=''):
               return str(meta.get(key) or default).strip()
 
+          # 更新弹窗里固定附带数据保护说明：用户最担心的就是升级会不会冲掉 data / extensions。
+          data_notice = (
+              '\n\n## 用户数据保护\n\n'
+              '- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，'
+              '与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n'
+              '- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n'
+              '- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。\n'
+          )
+
           latest = {
               'status': {'code': 'ready'},
               'release': {
@@ -128,7 +137,7 @@ jobs:
                   'buildType': s('build_type'),
                   'versionName': s('version_name'),
                   'hostVersion': s('host_version'),
-                  'notesMarkdown': str(release.get('body') or ''),
+                  'notesMarkdown': (str(release.get('body') or '') + data_notice).strip(),
                   'apk': {
                       'assetName': s('apk_asset_name') or apk_asset['name'],
                       'downloadUrl': apk_asset['browser_download_url'],
@@ -159,9 +168,45 @@ jobs:
           git commit -m "chore(fork-meta): update latest.json for ${{ steps.pick.outputs.target_tag }}"
           git push origin HEAD:${{ github.event.repository.default_branch || 'master' }}
 
-      - name: Print CDN reminder
+      - name: Purge jsDelivr cache and verify propagation
         env:
           REPO: ${{ github.repository }}
         run: |
-          echo "latest.json 已更新。App 读取地址（jsDelivr 有几分钟缓存）："
-          echo "https://cdn.jsdelivr.net/gh/${REPO}@master/.github/fork-meta/latest.json"
+          set -euo pipefail
+
+          # jsDelivr 对 gh/<owner>/<repo>@<ref> 默认缓存 12 小时。只提交 latest.json
+          # 而不清缓存，手机端最长会晚半天才看到新版本——这正是“明明发了版却没提示”的经典原因。
+          version_name="$(python3 -c 'import json; print(json.load(open(".github/fork-meta/latest.json", encoding="utf-8"))["release"]["versionName"])')"
+          echo "本次发布版本：${version_name}"
+
+          purge_url="https://purge.jsdelivr.net/gh/${REPO}@master/.github/fork-meta/latest.json"
+          curl -fsS --max-time 30 "$purge_url" > /dev/null || echo '清理缓存接口调用失败，继续等待自然过期。'
+
+          cdn_url="https://cdn.jsdelivr.net/gh/${REPO}@master/.github/fork-meta/latest.json"
+          served_file="$(mktemp)"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 20 "${cdn_url}?ts=$(date +%s)" -o "$served_file"; then
+              served="$(python3 - "$served_file" <<'PY'
+          import json
+          import sys
+
+          try:
+              payload = json.load(open(sys.argv[1], encoding='utf-8'))
+          except Exception:
+              print('')
+              raise SystemExit(0)
+          print(str((payload.get('release') or {}).get('versionName') or ''))
+          PY
+              )"
+            else
+              served=''
+            fi
+            if [ "$served" = "$version_name" ]; then
+              echo "CDN 已返回新版本（第 ${attempt} 次探测）：${served}"
+              exit 0
+            fi
+            echo "第 ${attempt} 次探测仍为：${served:-空}，等待后重试。"
+            sleep 6
+          done
+
+          echo 'CDN 暂未刷新到新版本；latest.json 已提交，App 端还有 raw.githubusercontent 兜底可用。' >&2

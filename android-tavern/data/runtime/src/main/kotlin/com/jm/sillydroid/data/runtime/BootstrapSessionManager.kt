@@ -413,6 +413,11 @@ class BootstrapSessionManager(
                     details = "Tavern server source 与依赖包已是最新，APK 内置 host 扩展已同步到运行目录。"
                 )
             } else {
+                // 正式覆盖解包前先给 data / extensions / plugins 打快照（硬链接，几乎零成本），
+                // 万一上游解包行为变化，用户仍然有可回滚的数据副本。
+                TavernUserDataGuard.snapshotBeforeAssetRefresh(paths) { line ->
+                    appendStartupLog(line)
+                }
                 startStep(
                     stepId = BootstrapStepId.PREPARE_SERVER_ASSETS,
                     detection = serverInspection.detection,
