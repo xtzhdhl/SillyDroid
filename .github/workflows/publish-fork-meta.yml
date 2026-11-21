@@ -122,11 +122,14 @@ jobs:
 
           # 更新弹窗里固定附带数据保护说明：用户最担心的就是升级会不会冲掉 data / extensions。
           data_notice = (
-              '\n\n## 用户数据保护\n\n'
-              '- 角色、聊天、世界书等数据位于 App 私有持久目录的 data / extensions / plugins 下，'
-              '与每次升级都会被覆盖解包的 Tavern 源码目录完全分离。\n'
-              '- 升级后首次启动会在覆盖 server 资产前，把 data / extensions / plugins 打成硬链接快照（保留最近 2 份）。\n'
-              '- 覆盖安装不会清除 App 数据；请不要卸载重装，也不要换成其它签名的安装包。\n'
+              '\n\n## Data safety\n\n'
+              '- Characters, chats, lorebooks and API keys live in the app-private data directory '
+              '(`data / extensions / plugins`), fully separate from the Tavern source tree that every '
+              'upgrade re-extracts.\n'
+              '- On the first launch after an upgrade, `data / extensions / plugins` are hardlink-snapshotted '
+              'before those assets are refreshed (last 2 snapshots kept).\n'
+              '- In-place installs keep app data. Do not uninstall, and do not install a build with a '
+              'different signature.\n'
           )
 
           latest = {

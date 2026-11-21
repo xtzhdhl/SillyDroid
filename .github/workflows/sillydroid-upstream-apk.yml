@@ -914,12 +914,12 @@ jobs:
             done < <(git rev-list --reverse "$@")
 
             if [ "$emitted_any" != 'true' ]; then
-              printf -- '- 无新增提交说明\n'
+              printf -- '- No new commits in this build.\n'
             fi
           }
 
           {
-            echo '## 本次更新内容'
+            echo "## What's new"
             echo
 
             if [ -n "$previous_release_tag" ] && git merge-base --is-ancestor "$previous_release_tag" '${{ github.sha }}'; then
