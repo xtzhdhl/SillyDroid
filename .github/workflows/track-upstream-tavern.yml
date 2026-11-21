@@ -241,7 +241,7 @@ jobs:
             exit 0
           fi
 
-          existing="$(gh issue list --state open --search 'SillyDroid 上游宿主有新提交 in:title' --json number --jq 'length' || echo 0)"
+          existing="$(gh issue list --state open --search 'upstream host has new commits in:title' --json number --jq 'length' || echo 0)"
           if [ "${existing:-0}" != '0' ]; then
             echo '已有未关闭的合并提醒 issue，跳过创建。'
             exit 0
@@ -249,19 +249,19 @@ jobs:
 
           body_file="$(mktemp)"
           {
-            printf '本 fork 相对 %s 的 master HEAD（%s）状态为 `%s`。\n\n' "$UPSTREAM_HOST_REPO" "${upstream_head:0:8}" "$status"
-            echo '上游宿主的修复不会自动进入本 fork，请手动合并后推送一次（推送会自动触发 APK 重建）：'
+            printf 'This fork is `%s` relative to %s master HEAD (%s).\n\n' "$status" "$UPSTREAM_HOST_REPO" "${upstream_head:0:8}"
+            echo 'Upstream host fixes are not merged automatically. Merge and push once (the push triggers an APK rebuild):'
             echo
             echo '```bash'
-            echo "git remote add upstream https://github.com/${UPSTREAM_HOST_REPO}.git  # 若尚未添加"
+            echo "git remote add upstream https://github.com/${UPSTREAM_HOST_REPO}.git  # if missing"
             echo 'git fetch upstream'
             echo 'git merge upstream/master'
             echo 'git push origin master'
             echo '```'
             echo
-            echo '合并后关闭本 issue。'
+            echo 'Close this issue once merged.'
           } > "$body_file"
 
           gh issue create \
-            --title 'SillyDroid 上游宿主有新提交，需要手动合并' \
+            --title 'Upstream host has new commits, manual merge required' \
             --body-file "$body_file" || true

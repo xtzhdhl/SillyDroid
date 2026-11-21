@@ -164,7 +164,7 @@ jobs:
           set -euo pipefail
 
           conflicts='${{ steps.merge.outputs.conflict_files }}'
-          existing="$(gh issue list --state open --search '上游宿主合并冲突 in:title' --json number --jq 'length' || echo 0)"
+          existing="$(gh issue list --state open --search 'upstream host merge conflict in:title' --json number --jq 'length' || echo 0)"
           if [ "${existing:-0}" != '0' ]; then
             echo '已有未关闭的冲突 issue，跳过创建。'
             exit 0
@@ -172,18 +172,18 @@ jobs:
 
           body_file="$(mktemp)"
           {
-            printf '自动合并 `%s` 的 master 时发生冲突，已回滚，仓库保持原状。\n\n' "$UPSTREAM_HOST_REPO"
-            printf '冲突文件：\n\n```\n%s\n```\n\n' "$conflicts"
-            echo '处理方式（二选一）：'
+            printf 'Automatic merge of `%s` master hit a conflict. The merge was aborted; the repository is unchanged.\n\n' "$UPSTREAM_HOST_REPO"
+            printf 'Conflicted files:\n\n```\n%s\n```\n\n' "$conflicts"
+            echo 'How to resolve (either way):'
             echo
-            echo '1. 让 AI 助手合并：把本 issue 链接发过去，说“按 issue 里的冲突文件手动合并”，'
-            echo '   会逐个人工解决冲突、跑构建、发布新版本。'
-            echo '2. 自己处理：本地 `git fetch upstream && git merge upstream/master`，'
-            echo '   解决冲突后 push，构建会自动触发。'
+            echo '1. Hand it to the AI assistant that maintains this fork: paste this issue link and ask it to'
+            echo '   resolve the conflicts manually, run the build and publish a new version.'
+            echo '2. Do it yourself: `git fetch upstream && git merge upstream/master` locally,'
+            echo '   resolve the conflicts, then push; the build is triggered automatically.'
             echo
-            echo '在此之前，手机上的版本不受影响（latest.json 不会变）。'
+            echo 'Until then the phone keeps running the previous version (latest.json is untouched).'
           } > "$body_file"
 
           gh issue create \
-            --title '上游宿主合并冲突，需要人工处理' \
+            --title 'Upstream host merge conflict, manual resolution required' \
             --body-file "$body_file" || true
