@@ -39,6 +39,15 @@ https://cdn.jsdelivr.net/gh/xtzhdhl/using@master/.github/fork-meta/latest.json
 3. `gcore.jsdelivr.net`
 4. `raw.githubusercontent.com`（不走 CDN，用来复核“已是最新”的结论）
 
+### 定时巡检不会被“60 天规则”停掉
+
+GitHub 对公开仓库有条规则：**连续 60 天没有任何仓库活动，自动停用所有定时工作流**。
+上游几个月才发一次版很常见，只靠“有新版本才有 bot 提交”会正好撞上。
+
+因此 `.github/workflows/keepalive.yml` 每月 1 号、16 号写一次 `.github/fork-meta/heartbeat.txt` 并提交，
+让仓库活动间隔最大只有 15 天，巡检永远不会因为“太久没动静”被停用。
+心跳文件的路径不在 APK 构建的触发范围内，所以不会引起 330 MB 的构建。
+
 ### 手动操作
 
 - **立刻检查上游新版本并构建**：Actions → `track-upstream-tavern` → Run workflow。
@@ -130,6 +139,16 @@ SillyTavern 运行时通过 `--dataRoot` 指到持久目录，并把 `public/scr
 5. **明文流量**：`usesCleartextTraffic=true` 是为了连局域网 LLM（`http://192.168.x.x`），代价是同类 http 请求
    可被同网段嗅探；走公网的 API 请确认是 https。
 6. **公开的构建日志**：release 签名材料只从 Actions secrets 注入（debug 构建根本不读），日志里只有变量名。
+
+### 额外加的两道保护
+
+- **日志导出/上传自动打码**（`HostLogSecretRedactor`）：只在把日志写进 zip 的那一刻替换，
+  手机上的原始日志保持原样。覆盖 `sk-` / `sk-ant-` / `AIza…` / `ghp_…` / `Bearer …` /
+  `Authorization:` / `api_key=` / `token=` / `secret=` / `password=` / `?key=` 等常见形态，
+  换成 `[已隐藏]` 并保留字段名。**局限**：正则启发式会漏自定义格式的 key，图片附件洗不了。
+- **覆盖安装前校验签名**（`AppUpdateApkSignature`）：读更新包签名证书的 SHA-256 与当前应用比对，
+  不一致就不拉起安装器并给出明确原因（而不是让系统弹一句含糊的“应用未安装”），
+  顺带拦住 debug 包 / 官方 release 包混装成两个独立应用。读不出签名时放行，交给系统兜底。
 
 ### 建议
 

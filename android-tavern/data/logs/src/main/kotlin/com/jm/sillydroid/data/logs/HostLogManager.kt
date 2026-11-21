@@ -46,6 +46,8 @@ object HostLogManager {
     private const val realtimeSnapshotMaxBytes = 24 * 1024
     private const val realtimeSnapshotMaxLines = 120
     private const val retainedAppSessionCount = 5
+    // 超过这个大小的文本日志不走逐行打码，直接原样拷贝，避免导出时占用过多内存。
+    private const val logRedactMaxBytes = 8L * 1024L * 1024L
     private const val startupLogPrefix = "startup-"
     private const val tavernServerLogPrefix = "sillydroid-server-"
     private const val rootfsRuntimeLogPrefix = "rootfs-runtime-"
@@ -1148,9 +1150,7 @@ object HostLogManager {
                 if (shouldWriteCompactUploadLogEntry(compactForUpload, compactTavernServerLogs, logFile)) {
                     writeCompactUploadLogEntry(context, logFile, zipOut)
                 } else {
-                    logFile.inputStream().use { input ->
-                        input.copyTo(zipOut)
-                    }
+                    writeRedactedLogEntry(logFile, zipOut)
                 }
                 zipOut.closeEntry()
             }
@@ -1205,7 +1205,27 @@ object HostLogManager {
                 tailWindowProfile = HostLogTailWindowProfile.COMPACT
             )
         }
-        output.write(content.toByteArray(Charsets.UTF_8))
+        output.write(HostLogSecretRedactor.redact(content).toByteArray(Charsets.UTF_8))
+    }
+
+    /**
+     * 日志包里的文本条目在写入 zip 的同时做一次密钥打码，手机上原始日志不受影响。
+     * 二进制或超大条目原样拷贝，避免打码过程把内容改坏或占用过多内存。
+     */
+    private fun writeRedactedLogEntry(logFile: File, output: OutputStream) {
+        if (!HostLogSecretRedactor.isRedactableFileName(logFile.name) || logFile.length() > logRedactMaxBytes) {
+            logFile.inputStream().use { input ->
+                input.copyTo(output)
+            }
+            return
+        }
+
+        logFile.bufferedReader(Charsets.UTF_8).useLines { lines ->
+            lines.forEach { line ->
+                output.write(HostLogSecretRedactor.redact(line).toByteArray(Charsets.UTF_8))
+                output.write('\n'.code)
+            }
+        }
     }
 
     private fun sanitizeAttachmentEntryName(requestedEntryName: String, fallbackIndex: Int): String {

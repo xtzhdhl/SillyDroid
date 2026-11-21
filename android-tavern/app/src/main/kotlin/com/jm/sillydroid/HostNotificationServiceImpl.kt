@@ -24,6 +24,8 @@ import com.jm.sillydroid.core.model.notification.HostNotificationChannel
 import com.jm.sillydroid.core.model.notification.HostNotificationKind
 import com.jm.sillydroid.core.model.notification.HostNotificationProgress
 import com.jm.sillydroid.core.model.notification.HostNotificationSpec
+import com.jm.sillydroid.core.ui.update.AppUpdateApkSignature
+import com.jm.sillydroid.core.ui.update.AppUpdateApkSignatureVerdict
 import com.jm.sillydroid.domain.notification.HostNotificationService
 import java.io.File
 
@@ -222,6 +224,16 @@ class HostNotificationServiceImpl(
                 val apkFile = File(apkPath)
                 if (!apkFile.isFile) {
                     return null
+                }
+
+                // 与 AppUpdateCoordinator 保持一致：签名不一致就不拉起安装器（系统必然失败），
+                // 退回到下载目录让用户自己处理，并留一行日志便于排查。
+                if (AppUpdateApkSignature.verify(appContext, apkFile) == AppUpdateApkSignatureVerdict.MISMATCH) {
+                    android.util.Log.w(
+                        "SillyDroidUpdate",
+                        "skip installer launch: apk signature mismatch, path=$apkPath"
+                    )
+                    return createDownloadsFallbackPendingIntent(spec)
                 }
 
                 val installUri = FileProvider.getUriForFile(

@@ -1,0 +1,61 @@
+name: keepalive
+
+# GitHub 的规则：公开仓库连续 60 天没有任何活动，会自动停用所有定时工作流（包括每天的新版本巡检）。
+# 上游 SillyTavern 几个月才发一次版很常见，靠“有新版本才有 bot 提交”会正好撞上这条规则。
+#
+# 这里每半月写一次心跳文件并提交，让仓库活动间隔始终远小于 60 天，巡检就不会被停用。
+# 心跳文件的路径不在 APK 构建的触发范围内，不会引起 330 MB 的构建。
+
+on:
+  schedule:
+    # 每月 1 号、16 号 UTC 03:00（北京时间 11:00），最大间隔 15 天，留足余量。
+    - cron: '0 3 1,16 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    # 只在 fork 里跑，避免误在作者仓库制造提交。
+    if: github.repository != 'jialmaster/SillyDroid'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Write heartbeat and commit
+        run: |
+          set -euo pipefail
+          mkdir -p .github/fork-meta
+          printf '%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > .github/fork-meta/heartbeat.txt
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/fork-meta/heartbeat.txt
+
+          if git diff --cached --quiet; then
+            echo '心跳没有变化，跳过提交。'
+            exit 0
+          fi
+
+          git commit -m "chore(keepalive): 心跳提交，避免 60 天无活动导致定时巡检被停用"
+          # 发布元数据的工作流可能刚推过 master，先变基再推，避免非快进拒绝。
+          git pull --rebase origin master || true
+          git push origin HEAD:master
+
+      - name: Report tracker freshness
+        run: |
+          set -euo pipefail
+          # 顺手看一眼巡检工作流最近有没有正常跑；跑不动时这里会明确报出来，而不是等到你发现没更新。
+          last="$(gh api "repos/${{ github.repository }}/actions/workflows/track-upstream-tavern.yml/runs?per_page=1" \
+            --jq '.workflow_runs[0] | "\(.created_at) \(.conclusion)"' 2>/dev/null || echo 'unknown')"
+          echo "track-upstream-tavern 最近一次运行：${last}"
+        env:
+          GH_TOKEN: ${{ github.token }}

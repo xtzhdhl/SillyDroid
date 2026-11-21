@@ -20,6 +20,8 @@ import com.jm.sillydroid.core.model.update.AppDownloadStatus
 import com.jm.sillydroid.core.model.update.AppUpdateBuildConfig
 import com.jm.sillydroid.core.model.update.AppUpdateRequestConfig
 import com.jm.sillydroid.core.model.update.AvailableAppRelease
+import com.jm.sillydroid.core.ui.update.AppUpdateApkSignature
+import com.jm.sillydroid.core.ui.update.AppUpdateApkSignatureVerdict
 import com.jm.sillydroid.domain.bootstrap.RuntimeMetadataRepository
 import com.jm.sillydroid.domain.notification.HostDownloadNotificationCoordinator
 import com.jm.sillydroid.domain.update.AppUpdateRepository
@@ -299,6 +301,13 @@ class AppUpdateCoordinator(
             clearDownloadState(removeDownload = true)
             showMessage(R.string.app_update_install_prepare_failed)
             renderState()
+            return
+        }
+
+        // 覆盖安装前先比对签名：系统虽然也会拒绝签名不一致的包，但只会含糊地说“应用未安装”。
+        // 这里提前拦下并把原因讲清楚，同时避免 debug 包 / release 包混装成两个独立应用。
+        if (AppUpdateApkSignature.verify(activity, updateFile) == AppUpdateApkSignatureVerdict.MISMATCH) {
+            showMessage(R.string.app_update_signature_mismatch)
             return
         }
 
